@@ -5,10 +5,29 @@ on:
     branches:
       - main
 
+
 jobs:
+    # Запустить тестирование приложения
   tests:
     runs-on: ubuntu-latest
-    # Блок services аналогичен docker-compose.yml
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.9
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip 
+        pip install flake8==6.0.0 flake8-isort==6.0.0
+    - name: Test with flake8
+      run: |
+        python -m flake8 backend/
+
+  # Собрать и отправить образ приложения на Docker Hub
+  build_and_push_to_docker_hub:
+    runs-on: ubuntu-latest
+    needs: tests  # Не выполнять сразу, ждать, пока выполнится tests
     services:
       postgres:
         image: postgres:13.10
@@ -25,29 +44,27 @@ jobs:
         # В результате тесты опять решат, что базы нет, — и упадут
         options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: 3.9
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.9
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip 
-        pip install flake8==6.0.0 flake8-isort==6.0.0
-        pip install -r ./backend/requirements.txt 
-    # Этот шаг дополним переменными для доступа к БД
-    - name: Test with flake8 and django tests
-      # Добавляем env-переменные для доступа к БД
-      env:
-        POSTGRES_USER: django_user
-        POSTGRES_PASSWORD: django_password
-        POSTGRES_DB: django_db
-        # Сервер БД запущен в Docker, но его порт проброшен на хост
-        # Поэтому подключаемся к 127.0.0.1:5432
-        DB_HOST: 127.0.0.1
-        DB_PORT: 5432
-      run: |
-        python -m flake8 backend/
-        cd backend/
-        python manage.py test
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip 
+          pip install -r ./backend/requirements.txt 
+      # Этот шаг дополним переменными для доступа к БД
+      - name: Django tests
+        # Добавляем env-переменные для доступа к БД
+        env:
+          POSTGRES_USER: django_user
+          POSTGRES_PASSWORD: django_password
+          POSTGRES_DB: django_db
+          # Сервер БД запущен в Docker, но его порт проброшен на хост
+          # Поэтому подключаемся к 127.0.0.1:5432
+          DB_HOST: 127.0.0.1
+          DB_PORT: 5432
+        run: |
+          cd backend/
+          python manage.py test
